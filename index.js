@@ -29,7 +29,7 @@ app.use(bodyParser.urlencoded({ extended: false }));
 app.use(express.json());
 
 app.post('/', async (req, res) => {
-    const { ContentLength,URL} = req.body;
+    const { ContentLength,URL,Duration} = req.body;
     let videoduration = 0;
     const Video =ytdl(URL, {
         filter: (format) => {
@@ -54,12 +54,15 @@ app.post('/', async (req, res) => {
             '-hide_banner',
             '-i', 'pipe:3',
             '-i', 'pipe:4',
+            '-t',Duration,
             '-map', '0:a',
             '-map', '1:v',
             '-c:v', 'copy',
             '-c:a', 'copy',
             '-preset', 'ultrafast',
-            '-f', 'matroska',
+            // '-f', 'matroska',
+            '-f', 'nut',
+            // '-f', 'mp4',
             'pipe:5',
         ],
         {
@@ -91,5 +94,3 @@ const port=4000
 server.listen(port, () => {
     console.log(`Backend listening on port ${port}`);
 });
-
-
