@@ -29,7 +29,24 @@ app.use(bodyParser.urlencoded({ extended: false }));
 app.use(express.json());
 
 app.post('/', async (req, res) => {
-    const { VideoURL, AudioURL } = req.body;
+    const { ContentLength,URL} = req.body;
+    let videoduration = 0;
+    const Video =ytdl(URL, {
+        filter: (format) => {
+            if (format.contentLength === ContentLength) {
+                videoduration = Math.max(videoduration, format.contentLength / 1024 / 1024);
+            }
+            return format.contentLength===ContentLength;
+        },
+    });
+
+    const Audio = ytdl(URL, {
+        filter: (format) => {
+            return format.audioQuality === "AUDIO_QUALITY_MEDIUM";
+        },
+    });
+
+
     const ffmpegProcess = cp.spawn(
         ffmpegStatic,
         [
@@ -51,23 +68,25 @@ app.post('/', async (req, res) => {
         }
     );
 
-    AudioURL.pipe(ffmpegProcess.stdio[3]);
-    VideoURL.pipe(ffmpegProcess.stdio[4]);
+    Audio.pipe(ffmpegProcess.stdio[3]);
+    Video.pipe(ffmpegProcess.stdio[4]);
     ffmpegProcess.stdio[5].pipe(res)
+
     let currentDuration = 0;
     ffmpegProcess.stdio[5].on("data", (data) => {
         currentDuration += data.length
         if (data) {
-            io.emit('data sent', { size: Math.floor((currentDuration / (1024 * 1024))) });
+            io.emit('data sent',{ 
+                size: Math.floor((currentDuration / (1024 * 1024))), duration: Math.floor(videoduration) 
+            });
         }
     })
     ffmpegProcess.stdio[5].on("download start", () => {
         io.emit("end")
     })
-
 })
 
-const port=8000
+const port=4000
 
 server.listen(port, () => {
     console.log(`Backend listening on port ${port}`);
