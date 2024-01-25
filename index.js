@@ -28,15 +28,19 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(express.json());
 
+app.get('/checksetup',async(req,res)=>{
+    res.send("Ready")
+})
+
 app.post('/', async (req, res) => {
-    const { ContentLength,URL,Duration} = req.body;
+    const { ContentLength, URL, Duration } = req.body;
     let videoduration = 0;
-    const Video =ytdl(URL, {
+    const Video = ytdl(URL, {
         filter: (format) => {
             if (format.contentLength === ContentLength) {
                 videoduration = Math.max(videoduration, format.contentLength / 1024 / 1024);
             }
-            return format.contentLength===ContentLength;
+            return format.contentLength === ContentLength;
         },
     });
 
@@ -46,22 +50,20 @@ app.post('/', async (req, res) => {
         },
     });
 
-
     const ffmpegProcess = cp.spawn(
         ffmpegStatic,
-        [
+        [ 
             '-loglevel', '8',
             '-hide_banner',
             '-i', 'pipe:3',
             '-i', 'pipe:4',
-            '-t',Duration,
+            '-t', Duration,
             '-map', '0:a',
             '-map', '1:v',
             '-c:v', 'copy',
             '-c:a', 'copy',
             '-preset', 'ultrafast',
-            // '-f', 'matroska',
-            '-f', 'nut',
+            '-f', 'matroska',
             // '-f', 'mp4',
             'pipe:5',
         ],
@@ -73,14 +75,21 @@ app.post('/', async (req, res) => {
 
     Audio.pipe(ffmpegProcess.stdio[3]);
     Video.pipe(ffmpegProcess.stdio[4]);
+    res.setHeader('Content-Type', 'video/mp4');
     ffmpegProcess.stdio[5].pipe(res)
+    // ffmpeg()
+    //     .input(ffmpegProcess.stdio[5])
+    //     .outputFormat('matroska')
+    //     .videoCodec('copy')
+    //     .audioCodec('copy')
+    //     .pipe(res, { end: true });
 
     let currentDuration = 0;
     ffmpegProcess.stdio[5].on("data", (data) => {
         currentDuration += data.length
         if (data) {
-            io.emit('data sent',{ 
-                size: Math.floor((currentDuration / (1024 * 1024))), duration: Math.floor(videoduration) 
+            io.emit('data sent', {
+                size: Math.floor((currentDuration / (1024 * 1024))), duration: Math.floor(videoduration)
             });
         }
     })
@@ -89,7 +98,7 @@ app.post('/', async (req, res) => {
     })
 })
 
-const port=4000
+const port = 4000
 
 server.listen(port, () => {
     console.log(`Backend listening on port ${port}`);
