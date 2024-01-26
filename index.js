@@ -28,74 +28,78 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(express.json());
 
-app.get('/checksetup',async(req,res)=>{
+app.get('/checksetup', async (req, res) => {
     res.send("Ready")
 })
 
 app.post('/', async (req, res) => {
     const { ContentLength, URL, Duration } = req.body;
-    let videoduration = 0;
-    const Video = ytdl(URL, {
-        filter: (format) => {
-            if (format.contentLength === ContentLength) {
-                videoduration = Math.max(videoduration, format.contentLength / 1024 / 1024);
-            }
-            return format.contentLength === ContentLength;
-        },
-    });
-
-    const Audio = ytdl(URL, {
-        filter: (format) => {
-            return format.audioQuality === "AUDIO_QUALITY_MEDIUM";
-        },
-    });
-
-    const ffmpegProcess = cp.spawn(
-        ffmpegStatic,
-        [ 
-            '-loglevel', '8',
-            '-hide_banner',
-            '-i', 'pipe:3',
-            '-i', 'pipe:4',
-            '-t', Duration,
-            '-map', '0:a',
-            '-map', '1:v',
-            '-c:v', 'copy',
-            '-c:a', 'copy',
-            '-preset', 'ultrafast',
-            '-f', 'matroska',
-            // '-f', 'mp4',
-            'pipe:5',
-        ],
-        {
-            windowsHide: true,
-            stdio: ["inherit", "inherit", "inherit", "pipe", "pipe", "pipe"],
-        }
-    );
-
-    Audio.pipe(ffmpegProcess.stdio[3]);
-    Video.pipe(ffmpegProcess.stdio[4]);
     res.setHeader('Content-Type', 'video/mp4');
-    ffmpegProcess.stdio[5].pipe(res)
-    // ffmpeg()
-    //     .input(ffmpegProcess.stdio[5])
-    //     .outputFormat('matroska')
-    //     .videoCodec('copy')
-    //     .audioCodec('copy')
-    //     .pipe(res, { end: true });
+    let videoduration = 0;
 
-    let currentDuration = 0;
-    ffmpegProcess.stdio[5].on("data", (data) => {
-        currentDuration += data.length
-        if (data) {
-            io.emit('data sent', {
-                size: Math.floor((currentDuration / (1024 * 1024))), duration: Math.floor(videoduration)
-            });
-        }
-    })
-    ffmpegProcess.stdio[5].on("download start", () => {
-        io.emit("end")
-    })
+    const isValid = ytdl.validateURL(URL)
+    if (!isValid) {
+        res.status(500).send("ERROR")
+        res.end()
+    } else {
+        const Video = ytdl(URL, {
+            filter: (format) => {
+                if (format.contentLength === ContentLength) {
+                    videoduration = Math.max(videoduration, format.contentLength / 1024 / 1024);
+                }
+                return format.contentLength === ContentLength;
+            },
+        });
+
+        const Audio = ytdl(URL, {
+            filter: (format) => {
+                return format.audioQuality === "AUDIO_QUALITY_MEDIUM";
+            },
+        });
+
+
+        const ffmpegProcess = cp.spawn(
+            ffmpegStatic,
+            [
+                '-loglevel', '8',
+                '-hide_banner',
+                '-i', 'pipe:3',
+                '-i', 'pipe:4',
+                '-t', Duration,
+                '-map', '0:a',
+                '-map', '1:v',
+                '-c:v', 'copy',
+                '-c:a', 'copy',
+                '-preset', 'ultrafast',
+                '-f', 'matroska',
+                // '-f', 'mp4',
+                'pipe:5',
+            ],
+            {
+                windowsHide: true,
+                stdio: ["inherit", "inherit", "inherit", "pipe", "pipe", "pipe"],
+            }
+        );
+
+        Video.pipe(ffmpegProcess.stdio[4]);
+        Audio.pipe(ffmpegProcess.stdio[3]);
+
+        ffmpegProcess.stdio[5].pipe(res)
+        
+        let currentDuration=0
+
+        ffmpegProcess.stdio[5].on("data", (data) => {
+            currentDuration += data.length
+            if (data) {
+                io.emit('data sent', {
+                    size: Math.floor((currentDuration / (1024 * 1024))), duration: Math.floor(videoduration)
+                });
+            }
+        })
+        ffmpegProcess.stdio[5].on("download start", () => {
+            io.emit("end")
+        })
+    }
 })
 
 const port = 4000
